@@ -6,6 +6,7 @@ import time
 import cv2
 import numpy as np
 import abc
+import random
 
 def pil_to_cv_image(pil_image):
     return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
@@ -21,7 +22,12 @@ class GameWindow:
             raise Exception("Expected only 1 match for the window title")
         self.hwnd_ = matched_list[0]
 
-    def click(self, point, is_absolute_position=False):
+    def click(self, point, is_absolute_position=False, right_click=False, point_offset_range=None):
+        # Introduce variation on point click
+        if point_offset_range is not None:
+            x_offset = random.randrange(point_offset_range[0]) * random.randint(-1, 1)
+            y_offset = random.randrange(point_offset_range[1]) * random.randint(-1, 1)
+            point = (point[0] + x_offset, point[1] + y_offset)
         if not is_absolute_position:
             bbox = self.get_window_coordinate()
             mouse_pos = (bbox[0] + point[0], bbox[1] + point[1])
@@ -29,8 +35,10 @@ class GameWindow:
             mouse_pos = (point[0], point[1])
         # FIXME PostMessage on mouse event is not responsive
         self.mouse_move(mouse_pos, True)
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN | win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1],0,0)
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP | win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1],0,0)
+        if right_click:
+            win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN | win32con.MOUSEEVENTF_RIGHTUP | win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1],0,0)
+        else:
+            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN | win32con.MOUSEEVENTF_LEFTUP | win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1],0,0)
 
     def mouse_move(self, point, is_absolute_position=False):
         if not is_absolute_position:
@@ -58,8 +66,6 @@ class GameWindow:
         else:
             mouse_pos = win32api.MAKELONG(point[0], point[1])
         win32gui.PostMessage(self.hwnd_, win32con.WM_KEYDOWN, 0x4A, 0)
-        time.sleep(1)
-        win32gui.PostMessage(self.hwnd_, win32con.WM_KEYUP, 0x4A, 0)
 
     def get_window_coordinate(self):
         bbox = win32gui.GetWindowRect(self.hwnd_)
@@ -116,13 +122,10 @@ class State(abc.ABC):
             return False
 
     def get_current_state_view(self):
-        retry_count = 3
-        for k in range(retry_count):
-            for i in range(len(self.state_view_)):
-                res = self.game_window_.find_matches(self.state_view_[i])
-                if len(res) > 0:
-                    return i, res
-            time.sleep(1)
+        for i in range(len(self.state_view_)):
+            res = self.game_window_.find_matches(self.state_view_[i])
+            if len(res) > 0:
+                return i, res
         raise Exception("No matching state view is found")
 
     @abc.abstractmethod
@@ -130,11 +133,14 @@ class State(abc.ABC):
         # some action to take at this state
         pass
 
-    def add_next_state(self, state):
-        self.next_states_.append(state)
+    def add_next_state(self, state, prioritized=False):
+        if prioritized:
+            self.next_states_.insert(0, state)
+        else:
+            self.next_states_.append(state)
 
     def next_state(self, wait_time=1):
-        retry_count = 10
+        retry_count = 30
         for i in range(retry_count):
             time.sleep(wait_time)
             self.game_window_.mouse_move((0,0))
