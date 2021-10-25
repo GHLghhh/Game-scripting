@@ -9,25 +9,38 @@ import abc
 import random
 import logging
 
+
 def pil_to_cv_image(pil_image):
     return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
+
 class GameWindow:
+
     def __init__(self, window_title):
         toplist, winlist = [], []
+
         def enum_cb(hwnd, results):
             winlist.append((hwnd, win32gui.GetWindowText(hwnd)))
+
         win32gui.EnumWindows(enum_cb, toplist)
-        matched_list = [hwnd for hwnd, title in winlist if window_title == title]
+        matched_list = [
+            hwnd for hwnd, title in winlist if window_title == title
+        ]
         if len(matched_list) != 1:
             raise Exception("Expected only 1 match for the window title")
         self.hwnd_ = matched_list[0]
 
-    def click(self, point, is_absolute_position=False, right_click=False, point_offset_range=None):
+    def click(self,
+              point,
+              is_absolute_position=False,
+              right_click=False,
+              point_offset_range=None):
         # Introduce variation on point click
         if point_offset_range is not None:
-            x_offset = random.randrange(point_offset_range[0]) * random.randint(-1, 1)
-            y_offset = random.randrange(point_offset_range[1]) * random.randint(-1, 1)
+            x_offset = random.randrange(point_offset_range[0]) * random.randint(
+                -1, 1)
+            y_offset = random.randrange(point_offset_range[1]) * random.randint(
+                -1, 1)
             point = (point[0] + x_offset, point[1] + y_offset)
         if not is_absolute_position:
             bbox = self.get_window_coordinate()
@@ -37,9 +50,13 @@ class GameWindow:
         # FIXME PostMessage on mouse event is not responsive
         self.mouse_move(mouse_pos, True)
         if right_click:
-            win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN | win32con.MOUSEEVENTF_RIGHTUP | win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1],0,0)
+            win32api.mouse_event(
+                win32con.MOUSEEVENTF_RIGHTDOWN | win32con.MOUSEEVENTF_RIGHTUP |
+                win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
         else:
-            win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN | win32con.MOUSEEVENTF_LEFTUP | win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1],0,0)
+            win32api.mouse_event(
+                win32con.MOUSEEVENTF_LEFTDOWN | win32con.MOUSEEVENTF_LEFTUP |
+                win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
 
     def mouse_move(self, point, is_absolute_position=False):
         if not is_absolute_position:
@@ -47,7 +64,7 @@ class GameWindow:
             mouse_pos = (bbox[0] + point[0], bbox[1] + point[1])
         else:
             mouse_pos = (point[0], point[1])
-        
+
         # FIXME sometimes there is unexpected Windows API error
         try:
             win32api.SetCursorPos(mouse_pos)
@@ -67,7 +84,8 @@ class GameWindow:
         bbox = win32gui.GetWindowRect(self.hwnd_)
         for pos in bbox:
             if pos < 0:
-                raise Exception("Unexpected negative position for window bounding box")
+                raise Exception(
+                    "Unexpected negative position for window bounding box")
         return bbox
 
     def get_current_screenshot(self):
@@ -103,6 +121,7 @@ class GameWindow:
 
 
 class State(abc.ABC):
+
     def __init__(self, game_window):
         self.game_window_ = game_window
         # The views that the state correspones to if matches,
@@ -142,9 +161,11 @@ class State(abc.ABC):
         retry_count = 30
         for i in range(retry_count):
             time.sleep(wait_time)
-            self.game_window_.mouse_move((0,0))
+            self.game_window_.mouse_move((0, 0))
             for next_state in self.next_states_:
                 if next_state.is_current_state():
-                    logging.info("Transit from '{}' to '{}'".format(type(self).__name__, type(next_state).__name__))
+                    logging.info("Transit from '{}' to '{}'".format(
+                        type(self).__name__,
+                        type(next_state).__name__))
                     return next_state
         return None

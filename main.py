@@ -15,11 +15,14 @@ import hearthstone.states
 import signal
 import sys
 
+
 def signal_handler(sig, frame):
     send_email("Script Stopped Manually")
     exit(0)
 
+
 signal.signal(signal.SIGINT, signal_handler)
+
 
 def send_email(title='Game Script Failed', error=Exception("No error")):
     gmail_user = os.getenv('GMAIL_USER')
@@ -47,7 +50,9 @@ def send_email(title='Game Script Failed', error=Exception("No error")):
             msgText = MIMEText('Err: {}'.format(error), 'html')
             # Likely not able to capture screenshot
         else:
-            msgText = MIMEText('Err: {}<br>Current state screenshot<br><img src="cid:image1"><br>'.format(error), 'html')
+            msgText = MIMEText(
+                'Err: {}<br>Current state screenshot<br><img src="cid:image1"><br>'
+                .format(error), 'html')
             msgAlternative.attach(msgText)
             current_screen = gw.get_current_screenshot()
             current_screen.save("screenshot.jpg")
@@ -58,7 +63,8 @@ def send_email(title='Game Script Failed', error=Exception("No error")):
 
         with open(log_filename, "rb") as f:
             log = MIMEApplication(f.read(), Name=log_filename)
-        log['Content-Disposition'] = 'attachment; filename="{}"'.format(log_filename)
+        log['Content-Disposition'] = 'attachment; filename="{}"'.format(
+            log_filename)
         msgRoot.attach(log)
 
         server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
@@ -67,10 +73,14 @@ def send_email(title='Game Script Failed', error=Exception("No error")):
         server.send_message(msgRoot)
         server.close()
 
+
 if __name__ == "__main__":
     app_name = "炉石传说"
-    log_filename = "{}_{}.log".format(app_name, datetime.now().strftime("%m_%d_%Y_%H:%M"))
-    logging.basicConfig(filename=log_filename, encoding='utf-8', level=logging.INFO)
+    log_filename = "{}_{}.log".format(app_name,
+                                      datetime.now().strftime("%m_%d_%Y_%H:%M"))
+    logging.basicConfig(filename=log_filename,
+                        encoding='utf-8',
+                        level=logging.INFO)
 
     try:
         gw = game_scripting.GameWindow(app_name)
@@ -80,7 +90,8 @@ if __name__ == "__main__":
             while current_state is not None:
                 try:
                     current_state.act()
-                    logging.info("Completed action at '{}'".format(type(current_state).__name__))
+                    logging.info("Completed action at '{}'".format(
+                        type(current_state).__name__))
                     current_state = current_state.next_state()
                 except Exception as err:
                     # Try to reintialize states
@@ -94,6 +105,3 @@ if __name__ == "__main__":
     except Exception as err:
         send_email(error=err)
         raise err
-
-        
-

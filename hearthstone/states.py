@@ -2,12 +2,16 @@ import cv2
 import game_scripting
 import time
 
+
 class SelectScreen(game_scripting.State):
+
     def __init__(self, game_window):
         super().__init__(game_window)
         # FIXME use file path
-        self.state_view_.append(cv2.imread('hearthstone/assets/battle_icon.jpg'))
-        self.state_view_.append(cv2.imread('hearthstone/assets/select_icon.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/battle_icon.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/select_icon.jpg'))
         self.next_states_.append(self)
 
     def act(self):
@@ -19,15 +23,21 @@ class SelectScreen(game_scripting.State):
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         self.game_window_.click(point, point_offset_range=off_range)
 
+
 class Battle(game_scripting.State):
+
     def __init__(self, game_window):
         super().__init__(game_window)
         # FIXME use file path
         self.state_view_.append(cv2.imread('hearthstone/assets/idle_icon.jpg'))
         self.state_view_.append(cv2.imread('hearthstone/assets/act_left.jpg'))
         self.state_view_.append(cv2.imread('hearthstone/assets/ready_icon.jpg'))
-        self.state_view_.append(cv2.imread('hearthstone/assets/prepare_icon.jpg'))
-        self.act_view_ = [cv2.imread('hearthstone/assets/act_left.jpg'), cv2.imread('hearthstone/assets/act_right.jpg')]
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/prepare_icon.jpg'))
+        self.act_view_ = [
+            cv2.imread('hearthstone/assets/act_left.jpg'),
+            cv2.imread('hearthstone/assets/act_right.jpg')
+        ]
         self.next_states_.append(self)
 
     def act(self):
@@ -61,12 +71,16 @@ class Battle(game_scripting.State):
             # FIXME only select the first action for now
             self.game_window_.click(action_points[0])
 
+
 class BattleSkipAction(game_scripting.State):
+
     def __init__(self, game_window):
         super().__init__(game_window)
         # FIXME use file path
-        self.state_view_.append(cv2.imread('hearthstone/assets/select_enemy_2.jpg'))
-        self.state_view_.append(cv2.imread('hearthstone/assets/select_enemy.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/select_enemy_2.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/select_enemy.jpg'))
         # This is part of the joint action, not included as state view
         self.ready_template_ = cv2.imread('hearthstone/assets/ready_icon_2.jpg')
 
@@ -78,7 +92,9 @@ class BattleSkipAction(game_scripting.State):
         point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         # Right click if at selecting enemy
-        self.game_window_.click(point, right_click=True, point_offset_range=off_range)
+        self.game_window_.click(point,
+                                right_click=True,
+                                point_offset_range=off_range)
 
         # Wait for animation
         time.sleep(2)
@@ -94,11 +110,14 @@ class BattleSkipAction(game_scripting.State):
 
 
 class BattleEnd(game_scripting.State):
+
     def __init__(self, game_window):
         super().__init__(game_window)
         # FIXME use file path
-        self.state_view_.append(cv2.imread('hearthstone/assets/click_prompt.jpg'))
-        self.state_view_.append(cv2.imread('hearthstone/assets/click_prompt_2.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/click_prompt.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/click_prompt_2.jpg'))
         self.next_states_.append(self)
 
     def act(self):
@@ -110,13 +129,20 @@ class BattleEnd(game_scripting.State):
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         self.game_window_.click(point, point_offset_range=off_range)
 
+
 class Treasure(game_scripting.State):
+
     def __init__(self, game_window):
         super().__init__(game_window)
         # FIXME use file path
-        self.state_view_.append(cv2.imread('hearthstone/assets/treasure_top.jpg'))
-        self.unselected_view_ = [cv2.imread('hearthstone/assets/treasure_top.jpg'), cv2.imread('hearthstone/assets/treasure_bottom.jpg')]
-        self.selected_view_ = cv2.imread('hearthstone/assets/treasure_selected.jpg')
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/treasure_top.jpg'))
+        self.unselected_view_ = [
+            cv2.imread('hearthstone/assets/treasure_top.jpg'),
+            cv2.imread('hearthstone/assets/treasure_bottom.jpg')
+        ]
+        self.selected_view_ = cv2.imread(
+            'hearthstone/assets/treasure_selected.jpg')
         self.next_states_.append(self)
 
     def act(self):
@@ -141,15 +167,19 @@ class Treasure(game_scripting.State):
             x = int((bres[0][0][0] + bres[0][1][0]) / 2)
             self.game_window_.click((x, y))
 
+
 class Retire(game_scripting.State):
+
     def __init__(self, game_window):
         super().__init__(game_window)
         # FIXME use file path
         # Order implies priority
         self.state_view_.append(cv2.imread('hearthstone/assets/rewards.jpg'))
-        self.state_view_.append(cv2.imread('hearthstone/assets/confirm_retire.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/confirm_retire.jpg'))
         self.state_view_.append(cv2.imread('hearthstone/assets/retire.jpg'))
-        self.state_view_.append(cv2.imread('hearthstone/assets/check_team_status.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/check_team_status.jpg'))
         self.next_states_.append(self)
 
     def act(self):
@@ -161,6 +191,7 @@ class Retire(game_scripting.State):
         point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         self.game_window_.click(point, point_offset_range=off_range)
+
 
 def initialize_states(game_window):
     start_state = SelectScreen(game_window)
