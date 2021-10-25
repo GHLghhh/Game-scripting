@@ -15,6 +15,8 @@ import hearthstone.states
 import signal
 import sys
 
+SCRIPT_START_TIME = time.time()
+
 
 def signal_handler(sig, frame):
     send_email("Script Stopped Manually")
@@ -36,6 +38,8 @@ def send_email(title='Game Script Failed', error=Exception("No error")):
         from email.mime.base import MIMEBase
         from email.mime.image import MIMEImage
 
+        script_duration = time.time() - SCRIPT_START_TIME
+
         # Set email content https://stackoverflow.com/a/60174103
         msgRoot = MIMEMultipart('related')
         msgRoot['Subject'] = title
@@ -44,22 +48,18 @@ def send_email(title='Game Script Failed', error=Exception("No error")):
         msgRoot.preamble = 'Multi-part message in MIME format.'
         msgAlternative = MIMEMultipart('alternative')
         msgRoot.attach(msgAlternative)
-        msgText = MIMEText("{}".format(error))
-        msgAlternative.attach(msgText)
-        if type(error) == pywintypes.error:
-            msgText = MIMEText('Err: {}'.format(error), 'html')
-            # Likely not able to capture screenshot
-        else:
-            msgText = MIMEText(
-                'Err: {}<br>Current state screenshot<br><img src="cid:image1"><br>'
-                .format(error), 'html')
-            msgAlternative.attach(msgText)
+        content = 'Script duration: {}<br>Err: {}'.format(
+            script_duration, error)
+        if type(error) != pywintypes.error:
+            content += '<br>Current state screenshot<br><img src="cid:image1"><br>'
             current_screen = gw.get_current_screenshot()
             current_screen.save("screenshot.jpg")
             with open('screenshot.jpg', 'rb') as fp:
                 msgImage = MIMEImage(fp.read())
             msgImage.add_header('Content-ID', '<image1>')
             msgRoot.attach(msgImage)
+        msgText = MIMEText(content, 'html')
+        msgAlternative.attach(msgText)
 
         with open(log_filename, "rb") as f:
             log = MIMEApplication(f.read(), Name=log_filename)
@@ -77,7 +77,7 @@ def send_email(title='Game Script Failed', error=Exception("No error")):
 if __name__ == "__main__":
     app_name = "炉石传说"
     log_filename = "{}_{}.log".format(app_name,
-                                      datetime.now().strftime("%m_%d_%Y_%H:%M"))
+                                      datetime.now().strftime("%m_%d_%Y_%H_%M"))
     logging.basicConfig(filename=log_filename,
                         encoding='utf-8',
                         level=logging.INFO)

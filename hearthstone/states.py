@@ -206,6 +206,7 @@ def initialize_states(game_window):
     battle.add_next_state(battle_end)
     battle.add_next_state(battle_skip_action, True)
     battle_skip_action.add_next_state(battle)
+    battle_skip_action.add_next_state(battle_end)
     battle_end.add_next_state(treasure)
     treasure.add_next_state(retire)
     retire.add_next_state(start_state)
