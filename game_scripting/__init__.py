@@ -158,7 +158,7 @@ class State(abc.ABC):
             self.next_states_.append(state)
 
     def next_state(self, wait_time=1):
-        retry_count = 30
+        retry_count = 60
         for i in range(retry_count):
             time.sleep(wait_time)
             self.game_window_.mouse_move((0, 0))
@@ -168,4 +168,5 @@ class State(abc.ABC):
                         type(self).__name__,
                         type(next_state).__name__))
                     return next_state
+        logging.info("Failed to find next state for '{}'".format(type(self).__name__))
         return None
