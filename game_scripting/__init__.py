@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import abc
 import random
+import logging
 
 def pil_to_cv_image(pil_image):
     return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
@@ -59,12 +60,7 @@ class GameWindow:
                 except pywintypes.error as err:
                     continue
 
-    def _keyboard(self, point, absolute_position=False):
-        if absolute_position:
-            bbox = self.get_window_coordinate()
-            mouse_pos = win32api.MAKELONG(bbox[0] + point[0], bbox[1] + point[1])
-        else:
-            mouse_pos = win32api.MAKELONG(point[0], point[1])
+    def _keyboard(self):
         win32gui.PostMessage(self.hwnd_, win32con.WM_KEYDOWN, 0x4A, 0)
 
     def get_window_coordinate(self):
@@ -116,10 +112,13 @@ class State(abc.ABC):
 
     def is_current_state(self):
         try:
-            _, res = self.get_current_state_view()
+            self.get_current_state_view()
             return True
         except Exception as err:
-            return False
+            if "No matching state view is found" in str(err):
+                return False
+            else:
+                raise err
 
     def get_current_state_view(self):
         for i in range(len(self.state_view_)):
@@ -146,5 +145,6 @@ class State(abc.ABC):
             self.game_window_.mouse_move((0,0))
             for next_state in self.next_states_:
                 if next_state.is_current_state():
+                    logging.info("Transit from '{}' to '{}'".format(type(self).__name__, type(next_state).__name__))
                     return next_state
         return None

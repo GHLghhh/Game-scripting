@@ -83,7 +83,6 @@ class BattleSkipAction(game_scripting.State):
         # Wait for animation
         time.sleep(2)
         res = self.game_window_.find_matches(self.ready_template_)
-        print(res)
         if len(res) == 0:
             raise Exception("No matching state view is found")
         # Get mid point of the match
