@@ -77,8 +77,14 @@ class GameWindow:
                 except pywintypes.error as err:
                     continue
 
-    def _keyboard(self):
-        win32gui.PostMessage(self.hwnd_, win32con.WM_KEYDOWN, 0x4A, 0)
+    def keyboard(self, key):
+        if key == "esc":
+            time.sleep(1)
+            win32gui.PostMessage(self.hwnd_, win32con.WM_KEYDOWN,
+                                 win32con.VK_ESCAPE, 0)
+            # win32gui.PostMessage(self.hwnd_, win32con.WM_KEYUP, win32con.VK_ESCAPE, 0)
+        else:
+            raise Exception("Unknown key press requested")
 
     def get_window_coordinate(self):
         bbox = win32gui.GetWindowRect(self.hwnd_)
@@ -120,7 +126,53 @@ class GameWindow:
         return res_list
 
 
+class StateMachine(abc.ABC):
+
+    def __init__(self, game_window) -> None:
+        self.game_window_ = game_window
+        self.current_state_ = None
+        self.states_ = []
+
+    def initialize_states(self):
+        self.current_state_ = None
+        for state in self.states_:
+            if state.is_current_state():
+                self.current_state_ = state
+        if self.current_state_ is None:
+            state_list = ""
+            for state in self.states_:
+                state_list += (type(state).__name__ + "; ")
+            raise Exception(
+                "No match for current state, availble states: {}".format(
+                    state_list))
+
+    @abc.abstractmethod
+    def update_loop_status(self, next_state):
+        pass
+
+    @abc.abstractmethod
+    def loop_status_string(self):
+        return ["No status"]
+
+    def proceed(self):
+        try:
+            self.current_state_.act()
+            logging.info("Completed action at '{}'".format(
+                type(self.current_state_).__name__))
+            next_state = self.current_state_.next_state()
+            self.update_loop_status(next_state)
+            self.current_state_ = next_state
+        except State.StateException as err:
+            # Try to reintialize states if state error happens
+            self.initialize_states()
+
+
 class State(abc.ABC):
+
+    class StateException(Exception):
+
+        def __init__(self, *args: object) -> None:
+            super().__init__(*args)
 
     def __init__(self, game_window):
         self.game_window_ = game_window
@@ -133,7 +185,7 @@ class State(abc.ABC):
         try:
             self.get_current_state_view()
             return True
-        except Exception as err:
+        except State.StateException as err:
             if "No matching state view is found" in str(err):
                 return False
             else:
@@ -144,7 +196,7 @@ class State(abc.ABC):
             res = self.game_window_.find_matches(self.state_view_[i])
             if len(res) > 0:
                 return i, res
-        raise Exception("No matching state view is found")
+        raise State.StateException("No matching state view is found")
 
     @abc.abstractmethod
     def act(self):
@@ -168,5 +220,22 @@ class State(abc.ABC):
                         type(self).__name__,
                         type(next_state).__name__))
                     return next_state
-        logging.info("Failed to find next state for '{}'".format(type(self).__name__))
-        return None
+        logging.info("Failed to find next state for '{}'".format(
+            type(self).__name__))
+        raise State.StateException("Failed to find next state for '{}'".format(
+            type(self).__name__))
+
+
+class MatchAndClickState(State):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+
+    def act(self):
+        _, res = self.get_current_state_view()
+        # Get mid point of the match
+        lo = res[0][0]
+        hi = res[0][1]
+        point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
+        off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+        self.game_window_.click(point, point_offset_range=off_range)

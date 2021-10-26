@@ -1,6 +1,130 @@
 import cv2
 import game_scripting
 import time
+import random
+
+
+class ShortArenaLoop(game_scripting.StateMachine):
+
+    def __init__(self, game_window) -> None:
+        super().__init__(game_window)
+        self.rewared_received_ = 0
+        self.start_time_ = time.time()
+
+        start_state = SelectScreen(self.game_window_)
+        forfeit = Forfeit(self.game_window_)
+        battle_end = BattleEnd(self.game_window_)
+        rewards = ArenaRewards(self.game_window_)
+
+        # Simple loop
+        start_state.add_next_state(forfeit)
+        forfeit.add_next_state(battle_end, True)
+        battle_end.add_next_state(start_state)
+        battle_end.add_next_state(rewards)
+        rewards.add_next_state(start_state)
+
+        self.states_ = [start_state, forfeit, battle_end, rewards]
+        self.initialize_states()
+
+    def update_loop_status(self, next_state):
+        retiring = (type(self.current_state_) == ArenaRewards)
+        # State changed (reward received)
+        if retiring and (type(next_state) != ArenaRewards):
+            self.rewared_received_ += 1
+
+    def loop_status_string(self):
+        script_duration = int(time.time() - self.start_time_)
+        return [
+            'Completed runs: {}'.format(self.rewared_received_),
+            'Script duration: {} seconds'.format(script_duration)
+        ]
+
+
+class ShortCampaignLoop(game_scripting.StateMachine):
+
+    def __init__(self, game_window) -> None:
+        super().__init__(game_window)
+        self.rewared_received_ = 0
+        self.start_time_ = time.time()
+
+        start_state = SelectScreen(self.game_window_)
+        battle = Battle(self.game_window_)
+        battle_skip_action = BattleSkipAction(self.game_window_)
+        battle_end = BattleEnd(self.game_window_)
+        treasure = Treasure(self.game_window_)
+        retire = Retire(self.game_window_)
+
+        # Simple loop
+        start_state.add_next_state(battle)
+        battle.add_next_state(battle_end)
+        battle.add_next_state(battle_skip_action, True)
+        battle_skip_action.add_next_state(battle)
+        battle_skip_action.add_next_state(battle_end)
+        battle_end.add_next_state(treasure)
+        treasure.add_next_state(retire)
+        retire.add_next_state(start_state)
+
+        self.states_ = [
+            start_state, battle, battle_skip_action, battle_end, treasure,
+            retire
+        ]
+        self.initialize_states()
+
+    def update_loop_status(self, next_state):
+        retiring = (type(self.current_state_) == Retire)
+        # State changed (reward received)
+        if retiring and (type(next_state) != Retire):
+            self.rewared_received_ += 1
+
+    def loop_status_string(self):
+        script_duration = int(time.time() - self.start_time_)
+        return [
+            'Completed runs: {}'.format(self.rewared_received_),
+            'Script duration: {} seconds'.format(script_duration)
+        ]
+
+
+class ArenaRewards(game_scripting.State):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/arena_rewards.jpg'))
+        self.next_states_.append(self)
+
+    def act(self):
+        # Hard code ratio of the reward location
+        off_ratio = (40 / 870, 35 / 701)
+        point_ratio = [(450 / 870, 190 / 701), (186 / 870, 300 / 701),
+                       (676 / 870, 330 / 701), (250 / 870, 600 / 701),
+                       (610 / 870, 623 / 701)]
+        _, res = self.get_current_state_view()
+        lo = res[0][0]
+        hi = res[0][1]
+        full_x = hi[0] - lo[0]
+        full_y = hi[1] - lo[1]
+
+        off_range = (int(off_ratio[0] * full_x), int(off_ratio[1] * full_y))
+        points = [(int(pr[0] * full_x + lo[0]), int(pr[1] * full_y + lo[1]))
+                  for pr in point_ratio]
+        random.shuffle(points)
+        print(points)
+        print(lo)
+        print(hi)
+        for point in points:
+            time.sleep(1)
+            self.game_window_.click(point, point_offset_range=off_range)
+
+
+class Forfeit(game_scripting.MatchAndClickState):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(cv2.imread('hearthstone/assets/forfeit.jpg'))
+        self.state_view_.append(cv2.imread('hearthstone/assets/options.jpg'))
+        self.next_states_.append(self)
 
 
 class SelectScreen(game_scripting.State):
@@ -10,6 +134,8 @@ class SelectScreen(game_scripting.State):
         # FIXME use file path
         self.state_view_.append(
             cv2.imread('hearthstone/assets/battle_icon.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/arena_battle.jpg'))
         self.state_view_.append(
             cv2.imread('hearthstone/assets/select_icon.jpg'))
         self.next_states_.append(self)
@@ -118,6 +244,7 @@ class BattleEnd(game_scripting.State):
             cv2.imread('hearthstone/assets/click_prompt.jpg'))
         self.state_view_.append(
             cv2.imread('hearthstone/assets/click_prompt_2.jpg'))
+        self.state_view_.append(cv2.imread('hearthstone/assets/defeated.jpg'))
         self.next_states_.append(self)
 
     def act(self):
@@ -191,35 +318,3 @@ class Retire(game_scripting.State):
         point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         self.game_window_.click(point, point_offset_range=off_range)
-
-
-def initialize_states(game_window):
-    start_state = SelectScreen(game_window)
-    battle = Battle(game_window)
-    battle_skip_action = BattleSkipAction(game_window)
-    battle_end = BattleEnd(game_window)
-    treasure = Treasure(game_window)
-    retire = Retire(game_window)
-
-    # Simple loop
-    start_state.add_next_state(battle)
-    battle.add_next_state(battle_end)
-    battle.add_next_state(battle_skip_action, True)
-    battle_skip_action.add_next_state(battle)
-    battle_skip_action.add_next_state(battle_end)
-    battle_end.add_next_state(treasure)
-    treasure.add_next_state(retire)
-    retire.add_next_state(start_state)
-
-    # Match current state
-    if start_state.is_current_state():
-        return start_state
-    elif battle.is_current_state():
-        return battle
-    elif battle_end.is_current_state():
-        return battle_end
-    elif treasure.is_current_state():
-        return treasure
-    elif retire.is_current_state():
-        return retire
-    return None
