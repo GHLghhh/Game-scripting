@@ -57,6 +57,7 @@ def send_email(title='Game Script Failed', error=Exception("No error")):
         if LOOP_OBJECT is not None:
             for status_string in LOOP_OBJECT.loop_status_string():
                 content += "{}<br>".format(status_string)
+        content += "Err: {}<br>".format(error)
         if type(error) != pywintypes.error:
             content += '<br>Current state screenshot<br><img src="cid:image1"><br>'
             current_screen = gw.get_current_screenshot()

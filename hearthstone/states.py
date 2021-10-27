@@ -12,24 +12,38 @@ class ShortArenaLoop(game_scripting.StateMachine):
         self.start_time_ = time.time()
 
         start_state = SelectScreen(self.game_window_)
-        forfeit = Forfeit(self.game_window_)
+        searching_opponent = SearchingOpponent(self.game_window_)
+        forfeit = Forfeit(self.game_window_, 0.3)
         battle_end = BattleEnd(self.game_window_)
+        battle_defeated = BattleDefeated(self.game_window_)
         rewards = ArenaRewards(self.game_window_)
+        loop_end = ArenaRewardsEnd(self.game_window_)
 
-        # Simple loop
-        start_state.add_next_state(forfeit)
+        # FIXME Simple loop is not right, now rewards state
+        # must be reached by all states
+        start_state.add_next_state(searching_opponent)
+        start_state.add_next_state(rewards, True)
+        searching_opponent.add_next_state(forfeit)
+        forfeit.add_next_state(rewards, True)
         forfeit.add_next_state(battle_end, True)
+        forfeit.add_next_state(battle_defeated, True)
         battle_end.add_next_state(start_state)
         battle_end.add_next_state(rewards)
-        rewards.add_next_state(start_state)
+        battle_defeated.add_next_state(start_state)
+        battle_defeated.add_next_state(rewards)
+        rewards.add_next_state(loop_end)
+        loop_end.add_next_state(start_state)
 
-        self.states_ = [start_state, forfeit, battle_end, rewards]
+        self.states_ = [
+            start_state, searching_opponent, forfeit, battle_end,
+            battle_defeated, rewards, loop_end
+        ]
         self.initialize_states()
 
     def update_loop_status(self, next_state):
-        retiring = (type(self.current_state_) == ArenaRewards)
+        retiring = (type(self.current_state_) == ArenaRewardsEnd)
         # State changed (reward received)
-        if retiring and (type(next_state) != ArenaRewards):
+        if retiring and (type(next_state) != ArenaRewardsEnd):
             self.rewared_received_ += 1
 
     def loop_status_string(self):
@@ -38,6 +52,15 @@ class ShortArenaLoop(game_scripting.StateMachine):
             'Completed runs: {}'.format(self.rewared_received_),
             'Script duration: {} seconds'.format(script_duration)
         ]
+
+    def proceed(self):
+        previous_state = self.current_state_
+        super().proceed()
+        if (type(previous_state) == Forfeit):
+            if type(self.current_state_) == BattleDefeated:
+                previous_state.adjust_wait_time(increase=True)
+            elif type(self.current_state_) == BattleEnd:
+                previous_state.adjust_wait_time(reset=True)
 
 
 class ShortCampaignLoop(game_scripting.StateMachine):
@@ -117,14 +140,40 @@ class ArenaRewards(game_scripting.State):
             self.game_window_.click(point, point_offset_range=off_range)
 
 
-class Forfeit(game_scripting.MatchAndClickState):
+class ArenaRewardsEnd(game_scripting.MatchAndClickState):
 
     def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(cv2.imread('hearthstone/assets/confirm.jpg'))
+
+
+class SearchingOpponent(game_scripting.MatchAndClickState):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/searching_opponent.jpg'))
+        self.next_states_.append(self)
+
+
+class Forfeit(game_scripting.MatchAndClickState):
+
+    def __init__(self, game_window, default_wait_time=0.5):
         super().__init__(game_window)
         # FIXME use file path
         self.state_view_.append(cv2.imread('hearthstone/assets/forfeit.jpg'))
         self.state_view_.append(cv2.imread('hearthstone/assets/options.jpg'))
         self.next_states_.append(self)
+        self.wait_time_ = default_wait_time
+        self.default_wait_time_ = default_wait_time
+
+    def adjust_wait_time(self, increase=False, reset=False):
+        if increase:
+            self.wait_time_ += self.default_wait_time_
+        if reset:
+            self.wait_time_ = self.default_wait_time_
 
 
 class SelectScreen(game_scripting.State):
@@ -244,7 +293,6 @@ class BattleEnd(game_scripting.State):
             cv2.imread('hearthstone/assets/click_prompt.jpg'))
         self.state_view_.append(
             cv2.imread('hearthstone/assets/click_prompt_2.jpg'))
-        self.state_view_.append(cv2.imread('hearthstone/assets/defeated.jpg'))
         self.next_states_.append(self)
 
     def act(self):
@@ -255,6 +303,15 @@ class BattleEnd(game_scripting.State):
         point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         self.game_window_.click(point, point_offset_range=off_range)
+
+
+class BattleDefeated(game_scripting.MatchAndClickState):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(cv2.imread('hearthstone/assets/defeated.jpg'))
+        self.next_states_.append(self)
 
 
 class Treasure(game_scripting.State):

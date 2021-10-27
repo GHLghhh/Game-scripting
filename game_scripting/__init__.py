@@ -132,12 +132,16 @@ class StateMachine(abc.ABC):
         self.game_window_ = game_window
         self.current_state_ = None
         self.states_ = []
+        self.stale_limit_ = 60
+        self.previous_state_ = [0, None]
 
     def initialize_states(self):
         self.current_state_ = None
+        self.previous_state_ = [0, None]
         for state in self.states_:
             if state.is_current_state():
                 self.current_state_ = state
+                break
         if self.current_state_ is None:
             state_list = ""
             for state in self.states_:
@@ -155,6 +159,15 @@ class StateMachine(abc.ABC):
         return ["No status"]
 
     def proceed(self):
+        if self.current_state_ == self.previous_state_[1]:
+            self.previous_state_[0] += 1
+            if self.previous_state_[0] >= self.stale_limit_:
+                raise Exception(
+                    "State '{}' was repeated more than {} times".format(
+                        type(self.previous_state_[1]).__name__,
+                        self.previous_state_[0]))
+        else:
+            self.previous_state_ = [0, self.current_state_]
         try:
             self.current_state_.act()
             logging.info("Completed action at '{}'".format(
@@ -180,6 +193,7 @@ class State(abc.ABC):
         # order implies priority if multiple view are matched
         self.state_view_ = []
         self.next_states_ = []
+        self.wait_time_ = 1
 
     def is_current_state(self):
         try:
@@ -209,10 +223,10 @@ class State(abc.ABC):
         else:
             self.next_states_.append(state)
 
-    def next_state(self, wait_time=1):
+    def next_state(self, wait_time=None):
         retry_count = 60
         for i in range(retry_count):
-            time.sleep(wait_time)
+            time.sleep(wait_time if wait_time is not None else self.wait_time_)
             self.game_window_.mouse_move((0, 0))
             for next_state in self.next_states_:
                 if next_state.is_current_state():
