@@ -194,6 +194,7 @@ class State(abc.ABC):
         self.state_view_ = []
         self.next_states_ = []
         self.wait_time_ = 1
+        self.gray_scale_matching_ = True
 
     def is_current_state(self):
         try:
@@ -205,9 +206,9 @@ class State(abc.ABC):
             else:
                 raise err
 
-    def get_current_state_view(self):
-        for i in range(len(self.state_view_)):
-            res = self.game_window_.find_matches(self.state_view_[i])
+    def get_current_state_view(self, offset=0):
+        for i in range(offset, len(self.state_view_)):
+            res = self.game_window_.find_matches(self.state_view_[i], self.gray_scale_matching_)
             if len(res) > 0:
                 return i, res
         raise State.StateException("No matching state view is found")
