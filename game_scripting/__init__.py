@@ -16,7 +16,7 @@ def pil_to_cv_image(pil_image):
 
 class GameWindow:
 
-    def __init__(self, window_title):
+    def __init__(self, window_title, screenshot_expiration=0):
         toplist, winlist = [], []
 
         def enum_cb(hwnd, results):
@@ -29,6 +29,11 @@ class GameWindow:
         if len(matched_list) != 1:
             raise Exception("Expected only 1 match for the window title")
         self.hwnd_ = matched_list[0]
+
+        # FIXME expiration makes hearthstone battle state weired
+        self.screenshot_expiration_ = screenshot_expiration
+        self.last_taken_ = 0
+        self.get_current_screenshot()
 
     def click(self,
               point,
@@ -99,10 +104,13 @@ class GameWindow:
         # which will result in partially capture
         # FIXME multiple calls to SetForegroundWindow() returns unexpected
         # error, now check foreground to avoid multiple calls
-        if (win32gui.GetForegroundWindow() != self.hwnd_):
-            win32gui.SetForegroundWindow(self.hwnd_)
-        bbox = win32gui.GetWindowRect(self.hwnd_)
-        return ImageGrab.grab(bbox, all_screens=True)
+        if (time.time() - self.last_taken_) > self.screenshot_expiration_:
+            if (win32gui.GetForegroundWindow() != self.hwnd_):
+                win32gui.SetForegroundWindow(self.hwnd_)
+            bbox = win32gui.GetWindowRect(self.hwnd_)
+            self.current_screenshot_ = ImageGrab.grab(bbox, all_screens=True)
+            self.last_taken_ = time.time()
+        return self.current_screenshot_
 
     # Return a list of point pairs that define the matching rectangles in the
     # current screenshot
@@ -224,12 +232,14 @@ class State(abc.ABC):
         else:
             self.next_states_.append(state)
 
-    def next_state(self, wait_time=None):
+    def next_state(self, wait_time=None, ignore_self=False):
         retry_count = 60
         for i in range(retry_count):
             time.sleep(wait_time if wait_time is not None else self.wait_time_)
             self.game_window_.mouse_move((0, 0))
             for next_state in self.next_states_:
+                if ignore_self and next_state == self:
+                    continue
                 if next_state.is_current_state():
                     logging.info("Transit from '{}' to '{}'".format(
                         type(self).__name__,
