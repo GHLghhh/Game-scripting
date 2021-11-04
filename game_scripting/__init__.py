@@ -34,6 +34,7 @@ class GameWindow:
         self.screenshot_expiration_ = screenshot_expiration
         self.last_taken_ = 0
         self.get_current_screenshot()
+        self.last_taken_ = 0
 
     def click(self,
               point,
@@ -99,7 +100,7 @@ class GameWindow:
                     "Unexpected negative position for window bounding box")
         return bbox
 
-    def get_current_screenshot(self):
+    def get_current_screenshot(self, to_cv=True):
         # FIXME resolution setting will affect bbox axis on some appllications
         # which will result in partially capture
         # FIXME multiple calls to SetForegroundWindow() returns unexpected
@@ -108,16 +109,17 @@ class GameWindow:
             if (win32gui.GetForegroundWindow() != self.hwnd_):
                 win32gui.SetForegroundWindow(self.hwnd_)
             bbox = win32gui.GetWindowRect(self.hwnd_)
-            self.current_screenshot_ = ImageGrab.grab(bbox, all_screens=True)
+            self.current_screenshot_ = pil_to_cv_image(ImageGrab.grab(bbox, all_screens=True)) if to_cv else ImageGrab.grab(bbox, all_screens=True)
             self.last_taken_ = time.time()
         return self.current_screenshot_
 
     # Return a list of point pairs that define the matching rectangles in the
     # current screenshot
     # FIXME template is no scalable for now
-    def find_matches(self, template, to_gray_scale=True):
+    def find_matches(self, template, to_gray_scale=True, img_rgb=None):
         # https://stackoverflow.com/a/35378944
-        img_rgb = pil_to_cv_image(self.get_current_screenshot())
+        if img_rgb is None:
+            img_rgb = self.get_current_screenshot()
         if to_gray_scale:
             img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)
             template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
@@ -185,6 +187,7 @@ class StateMachine(abc.ABC):
             self.current_state_ = next_state
         except State.StateException as err:
             # Try to reintialize states if state error happens
+            logging.info("Reinitializing states as error encountered: {}".format(err))
             self.initialize_states()
 
 
