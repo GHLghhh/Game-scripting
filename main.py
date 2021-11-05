@@ -110,7 +110,7 @@ def send_email(title='Game Script Failed', error=Exception("No error")):
         content += "Err: {}<br>".format(error)
         if type(error) != pywintypes.error:
             content += '<br>Current state screenshot<br><img src="cid:image1"><br>'
-            current_screen = gw.get_current_screenshot()
+            current_screen = gw.get_current_screenshot(to_cv=False)
             current_screen.save("screenshot.jpg")
             with open('screenshot.jpg', 'rb') as fp:
                 msgImage = MIMEImage(fp.read())
@@ -142,11 +142,9 @@ if __name__ == "__main__":
 
     try:
         gw = game_scripting.GameWindow(app_name)
-        # LOOP_OBJECT = hearthstone.states.ShortCampaignLoop(gw)
+        LOOP_OBJECT = hearthstone.states.ShortCampaignLoop(gw)
+        # LOOP_OBJECT = hearthstone.states.CampaignLoop(gw)
         # LOOP_OBJECT = hearthstone.states.ShortArenaLoop(gw)
-
-        # [WIP]
-        LOOP_OBJECT = hearthstone.states.CampaignLoop(gw)
         while True:
             LOOP_OBJECT.proceed()
     except Exception as err:
