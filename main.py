@@ -142,8 +142,8 @@ if __name__ == "__main__":
 
     try:
         gw = game_scripting.GameWindow(app_name)
-        LOOP_OBJECT = hearthstone.states.ShortCampaignLoop(gw)
-        # LOOP_OBJECT = hearthstone.states.CampaignLoop(gw)
+        # LOOP_OBJECT = hearthstone.states.ShortCampaignLoop(gw)
+        LOOP_OBJECT = hearthstone.states.CampaignLoop(gw)
         # LOOP_OBJECT = hearthstone.states.ShortArenaLoop(gw)
         while True:
             LOOP_OBJECT.proceed()

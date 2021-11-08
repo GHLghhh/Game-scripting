@@ -3,6 +3,7 @@ from numpy import character
 import game_scripting
 import time
 import random
+import functools
 
 
 class ShortArenaLoop(game_scripting.StateMachine):
@@ -471,11 +472,26 @@ class CharacterSelected(game_scripting.State):
         # FIXME use file path
         self.state_view_.append(cv2.imread('hearthstone/assets/act_left.jpg'))
         self.characters_ = [
-            (cv2.imread('hearthstone/assets/char_rag.jpg'), [(cv2.imread('hearthstone/assets/char_rag_skill_2.jpg'), self.simple_click)]),
-            (cv2.imread('hearthstone/assets/char_house.jpg'), [(cv2.imread('hearthstone/assets/char_house_skill_1.jpg'), self.simple_click)]),
-            (cv2.imread('hearthstone/assets/char_wal.jpg'), [(cv2.imread('hearthstone/assets/char_wal_skill_1.jpg'), self.simple_click)]),
-            (cv2.imread('hearthstone/assets/char_tregx.jpg'), [(cv2.imread('hearthstone/assets/char_tregx_skill_1.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/diabollo.jpg'), [(cv2.imread('hearthstone/assets/characters/diabollo_skill_2.jpg'), self.simple_click),
+            (cv2.imread('hearthstone/assets/characters/diabollo_skill_3.jpg'), functools.partial(self.click_target, True)),
+            (cv2.imread('hearthstone/assets/characters/diabollo_skill_1.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/rag.jpg'), [(cv2.imread('hearthstone/assets/characters/rag_skill_2.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/house.jpg'), [(cv2.imread('hearthstone/assets/characters/house_skill_1.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/wal.jpg'), [(cv2.imread('hearthstone/assets/characters/wal_skill_1.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/tregx.jpg'), [(cv2.imread('hearthstone/assets/characters/tregx_skill_1.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/antony.jpg'), [
+            (cv2.imread('hearthstone/assets/characters/antony_skill_1.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/bloodhoof.jpg'), [
+            (cv2.imread('hearthstone/assets/characters/bloodhoof_skill_2.jpg'), self.simple_click),
+            (cv2.imread('hearthstone/assets/characters/bloodhoof_skill_3.jpg'), self.simple_click),
+            (cv2.imread('hearthstone/assets/characters/bloodhoof_skill_1.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/gaton.jpg'), [(cv2.imread('hearthstone/assets/characters/gaton_skill_2.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/samuro.jpg'), [
+            (cv2.imread('hearthstone/assets/characters/samuro_skill_3.jpg'), self.simple_click),
+            (cv2.imread('hearthstone/assets/characters/samuro_skill_2.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/bomb.jpg'), [(cv2.imread('hearthstone/assets/characters/bomb_skill_1.jpg'), self.simple_click)]),
         ]
+        self.target_prompt_ = cv2.imread('hearthstone/assets/available_target.jpg')
         self.next_states_.append(self)
 
     # Additional logic to define how to cast the skill
@@ -486,6 +502,37 @@ class CharacterSelected(game_scripting.State):
         point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         self.game_window_.click(point, point_offset_range=off_range)
+    
+    # Additional logic to define how to cast the skill
+    def click_target(self, select_enemy, res):
+        # Click the mid point of the match
+        lo = res[0][0]
+        hi = res[0][1]
+        point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
+        off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+        self.game_window_.click(point, point_offset_range=off_range)
+        time.sleep(1)
+        current_screenshot = self.game_window_.get_current_screenshot()
+        res = self.game_window_.find_matches(self.target_prompt_, img_rgb=current_screenshot)
+        if len(res) != 0:
+            half_height = int(current_screenshot.shape[0] / 2)
+            if select_enemy:
+                allow_y_range = (0, half_height)
+            else:
+                allow_y_range = (half_height, 2 * half_height)
+            for pt in res:
+                # Skip if not in range
+                if (pt[1][1] < allow_y_range[0]) or (pt[1][1] > allow_y_range[1]):
+                    continue
+                # Click the lower part of the match
+                lo = pt[0]
+                hi = pt[1]
+                point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2) + (hi[1] - lo[1]))
+                off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+                self.game_window_.click(point, point_offset_range=off_range)
+                break
+        else:
+            raise game_scripting.State.StateException("Failed to find proper target for click_target()")
 
     def act(self):
         current_screenshot = self.game_window_.get_current_screenshot()
