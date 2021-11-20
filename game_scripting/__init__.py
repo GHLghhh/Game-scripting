@@ -57,11 +57,19 @@ class GameWindow:
         self.mouse_move(mouse_pos, True)
         if right_click:
             win32api.mouse_event(
-                win32con.MOUSEEVENTF_RIGHTDOWN | win32con.MOUSEEVENTF_RIGHTUP |
+                win32con.MOUSEEVENTF_RIGHTDOWN |
+                win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
+            time.sleep(0.05)
+            win32api.mouse_event(
+                win32con.MOUSEEVENTF_RIGHTUP |
                 win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
         else:
             win32api.mouse_event(
-                win32con.MOUSEEVENTF_LEFTDOWN | win32con.MOUSEEVENTF_LEFTUP |
+                win32con.MOUSEEVENTF_LEFTDOWN |
+                win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
+            time.sleep(0.05)
+            win32api.mouse_event(
+                win32con.MOUSEEVENTF_LEFTUP |
                 win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
 
     def mouse_move(self, point, is_absolute_position=False):

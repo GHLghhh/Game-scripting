@@ -157,6 +157,7 @@ class CampaignLoop(game_scripting.StateMachine):
         select_event.add_next_state(event_selected, True)
         event_selected.add_next_state(select_event)
         event_selected.add_next_state(select_battle)
+        select_battle.add_next_state(select_event)
         select_battle.add_next_state(start_state, True)
         loop_end.add_next_state(start_state)
 
@@ -371,6 +372,7 @@ class SelectEvent(game_scripting.State):
             except game_scripting.State.StateException as ex:
                 if "No matching state view is found" in str(ex):
                     return
+            time.sleep(0.2)
             last_point = None
             for (lo, hi) in res:
                 # Get mid point of the match
@@ -417,6 +419,7 @@ class SelectBattle(game_scripting.State):
             except game_scripting.State.StateException as ex:
                 if "No matching state view is found" in str(ex):
                     return
+            time.sleep(0.2)
             last_point = None
             for (lo, hi) in res:
                 # Get lower of the matching point
@@ -434,6 +437,9 @@ class SelectBattle(game_scripting.State):
                 self.game_window_.click(point, point_offset_range=off_range)
                 if super().next_state(wait_time=0.3) != self:
                     return
+
+    def next_state(self, wait_time=None, ignore_self=True):
+        return super().next_state(wait_time=wait_time, ignore_self=True)
 
 
 class Battle(game_scripting.State):
@@ -490,6 +496,7 @@ class CharacterSelected(game_scripting.State):
             (cv2.imread('hearthstone/assets/characters/samuro_skill_3.jpg'), self.simple_click),
             (cv2.imread('hearthstone/assets/characters/samuro_skill_2.jpg'), functools.partial(self.click_target, True))]),
             (cv2.imread('hearthstone/assets/characters/bomb.jpg'), [(cv2.imread('hearthstone/assets/characters/bomb_skill_1.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/lich_king.jpg'), [(cv2.imread('hearthstone/assets/characters/lich_king_skill_1.jpg'), functools.partial(self.click_target, True))]),
         ]
         self.target_prompt_ = cv2.imread('hearthstone/assets/available_target.jpg')
         self.next_states_.append(self)
