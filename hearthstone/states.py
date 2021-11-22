@@ -80,7 +80,10 @@ class ShortCampaignLoop(game_scripting.StateMachine):
         treasure = Treasure(self.game_window_)
         select_event = SelectEvent(self.game_window_)
         event_selected = EventSelected(self.game_window_)
+        close_stranger = CloseStranger(self.game_window_)
+        select_battle = SelectBattle(self.game_window_)
         retire = Retire(self.game_window_)
+        reset = Reset(self.game_window_)
 
         # Simple loop
         start_state.add_next_state(battle)
@@ -94,13 +97,27 @@ class ShortCampaignLoop(game_scripting.StateMachine):
         treasure.add_next_state(retire, True)
         treasure.add_next_state(select_event, True)
         select_event.add_next_state(retire)
+        select_event.add_next_state(close_stranger, True)
         select_event.add_next_state(event_selected, True)
         event_selected.add_next_state(select_event)
+        # Start a loop if close to a stranger (special event)
+        close_stranger.add_next_state(select_battle)
+        select_battle.add_next_state(start_state, True)
         retire.add_next_state(start_state)
+
+        # Reset should connect to any possible states
+        reset.add_next_state(start_state)
+        reset.add_next_state(battle)
+        reset.add_next_state(treasure)
+        reset.add_next_state(select_event)
+        reset.add_next_state(close_stranger)
+        # State that likely to disconnect
+        start_state.add_next_state(reset)
+        battle.add_next_state(reset)
 
         self.states_ = [
             start_state, battle, character_selected, battle_skip_action, battle_end, treasure,
-            select_event, event_selected, retire
+            select_event, event_selected, close_stranger, select_battle, retire, reset
         ]
         self.initialize_states()
 
@@ -553,6 +570,27 @@ class CharacterSelected(game_scripting.State):
                         return
         raise game_scripting.State.StateException("Failed to find proper action for selected charactor")
 
+# Transitioning state
+class CloseStranger(game_scripting.State):
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/special_event.jpg'))
+
+    def act(self):
+        pass
+
+    def get_current_state_view(self, offset=0):
+        current_screenshot = self.game_window_.get_current_screenshot()
+        for i in range(offset, len(self.state_view_)):
+            res = self.game_window_.find_matches(self.state_view_[i], self.gray_scale_matching_, img_rgb=current_screenshot)
+            # Check if the event is seen in the upper 1/3 of the game window
+            allow_y_range = int(current_screenshot.shape[0] / 3)
+            for pt in res:
+                if pt[1][1] <= allow_y_range:
+                    return i, [pt]
+        raise game_scripting.State.StateException("No matching state view is found")
 
 class BattleSkipAction(game_scripting.State):
 
@@ -679,3 +717,17 @@ class Retire(game_scripting.State):
         point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         self.game_window_.click(point, point_offset_range=off_range)
+
+class Reset(game_scripting.MatchAndClickState):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/disconnected.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/merc_mode.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/campaign.jpg'))
+        self.next_states_.append(self)
+
