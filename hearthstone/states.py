@@ -514,6 +514,7 @@ class CharacterSelected(game_scripting.State):
             (cv2.imread('hearthstone/assets/characters/samuro_skill_2.jpg'), functools.partial(self.click_target, True))]),
             (cv2.imread('hearthstone/assets/characters/bomb.jpg'), [(cv2.imread('hearthstone/assets/characters/bomb_skill_1.jpg'), self.simple_click)]),
             (cv2.imread('hearthstone/assets/characters/lich_king.jpg'), [(cv2.imread('hearthstone/assets/characters/lich_king_skill_1.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/creature.jpg'), [(cv2.imread('hearthstone/assets/characters/creature.jpg'), functools.partial(self.click_target, True))]),
         ]
         self.target_prompt_ = cv2.imread('hearthstone/assets/available_target.jpg')
         self.next_states_.append(self)
@@ -663,7 +664,7 @@ class Treasure(game_scripting.State):
             cv2.imread('hearthstone/assets/treasure_top_2.jpg'))
         self.view_ = [
             cv2.imread('hearthstone/assets/treasure_top.jpg'),
-            cv2.imread('hearthstone/assets/treasure_bottom.jpg'),
+            cv2.imread('hearthstone/assets/treasure_bottom_3.jpg'),
             cv2.imread('hearthstone/assets/treasure_top_2.jpg'),
             cv2.imread('hearthstone/assets/treasure_bottom_2.jpg'),
         ]
