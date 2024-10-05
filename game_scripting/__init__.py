@@ -16,7 +16,7 @@ def pil_to_cv_image(pil_image):
 
 class GameWindow:
 
-    def __init__(self, window_title):
+    def __init__(self, window_title, screenshot_expiration=0):
         toplist, winlist = [], []
 
         def enum_cb(hwnd, results):
@@ -29,6 +29,12 @@ class GameWindow:
         if len(matched_list) != 1:
             raise Exception("Expected only 1 match for the window title")
         self.hwnd_ = matched_list[0]
+
+        # FIXME expiration makes hearthstone battle state weired
+        self.screenshot_expiration_ = screenshot_expiration
+        self.last_taken_ = 0
+        self.get_current_screenshot()
+        self.last_taken_ = 0
 
     def click(self,
               point,
@@ -51,11 +57,19 @@ class GameWindow:
         self.mouse_move(mouse_pos, True)
         if right_click:
             win32api.mouse_event(
-                win32con.MOUSEEVENTF_RIGHTDOWN | win32con.MOUSEEVENTF_RIGHTUP |
+                win32con.MOUSEEVENTF_RIGHTDOWN |
+                win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
+            time.sleep(0.05)
+            win32api.mouse_event(
+                win32con.MOUSEEVENTF_RIGHTUP |
                 win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
         else:
             win32api.mouse_event(
-                win32con.MOUSEEVENTF_LEFTDOWN | win32con.MOUSEEVENTF_LEFTUP |
+                win32con.MOUSEEVENTF_LEFTDOWN |
+                win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
+            time.sleep(0.05)
+            win32api.mouse_event(
+                win32con.MOUSEEVENTF_LEFTUP |
                 win32con.MOUSEEVENTF_ABSOLUTE, mouse_pos[0], mouse_pos[1], 0, 0)
 
     def mouse_move(self, point, is_absolute_position=False):
@@ -94,22 +108,26 @@ class GameWindow:
                     "Unexpected negative position for window bounding box")
         return bbox
 
-    def get_current_screenshot(self):
+    def get_current_screenshot(self, to_cv=True):
         # FIXME resolution setting will affect bbox axis on some appllications
         # which will result in partially capture
         # FIXME multiple calls to SetForegroundWindow() returns unexpected
         # error, now check foreground to avoid multiple calls
-        if (win32gui.GetForegroundWindow() != self.hwnd_):
-            win32gui.SetForegroundWindow(self.hwnd_)
-        bbox = win32gui.GetWindowRect(self.hwnd_)
-        return ImageGrab.grab(bbox, all_screens=True)
+        if (time.time() - self.last_taken_) > self.screenshot_expiration_:
+            if (win32gui.GetForegroundWindow() != self.hwnd_):
+                win32gui.SetForegroundWindow(self.hwnd_)
+            bbox = win32gui.GetWindowRect(self.hwnd_)
+            self.current_screenshot_ = pil_to_cv_image(ImageGrab.grab(bbox, all_screens=True)) if to_cv else ImageGrab.grab(bbox, all_screens=True)
+            self.last_taken_ = time.time()
+        return self.current_screenshot_
 
     # Return a list of point pairs that define the matching rectangles in the
     # current screenshot
     # FIXME template is no scalable for now
-    def find_matches(self, template, to_gray_scale=True):
+    def find_matches(self, template, to_gray_scale=True, img_rgb=None):
         # https://stackoverflow.com/a/35378944
-        img_rgb = pil_to_cv_image(self.get_current_screenshot())
+        if img_rgb is None:
+            img_rgb = self.get_current_screenshot()
         if to_gray_scale:
             img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)
             template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
@@ -177,6 +195,7 @@ class StateMachine(abc.ABC):
             self.current_state_ = next_state
         except State.StateException as err:
             # Try to reintialize states if state error happens
+            logging.info("Reinitializing states as error encountered: {}".format(err))
             self.initialize_states()
 
 
@@ -194,6 +213,7 @@ class State(abc.ABC):
         self.state_view_ = []
         self.next_states_ = []
         self.wait_time_ = 1
+        self.gray_scale_matching_ = True
 
     def is_current_state(self):
         try:
@@ -205,9 +225,9 @@ class State(abc.ABC):
             else:
                 raise err
 
-    def get_current_state_view(self):
-        for i in range(len(self.state_view_)):
-            res = self.game_window_.find_matches(self.state_view_[i])
+    def get_current_state_view(self, offset=0):
+        for i in range(offset, len(self.state_view_)):
+            res = self.game_window_.find_matches(self.state_view_[i], self.gray_scale_matching_)
             if len(res) > 0:
                 return i, res
         raise State.StateException("No matching state view is found")
@@ -223,12 +243,14 @@ class State(abc.ABC):
         else:
             self.next_states_.append(state)
 
-    def next_state(self, wait_time=None):
+    def next_state(self, wait_time=None, ignore_self=False):
         retry_count = 60
         for i in range(retry_count):
             time.sleep(wait_time if wait_time is not None else self.wait_time_)
             self.game_window_.mouse_move((0, 0))
             for next_state in self.next_states_:
+                if ignore_self and next_state == self:
+                    continue
                 if next_state.is_current_state():
                     logging.info("Transit from '{}' to '{}'".format(
                         type(self).__name__,

@@ -1,7 +1,9 @@
 import cv2
+from numpy import character
 import game_scripting
 import time
 import random
+import functools
 
 
 class ShortArenaLoop(game_scripting.StateMachine):
@@ -16,8 +18,8 @@ class ShortArenaLoop(game_scripting.StateMachine):
         forfeit = Forfeit(self.game_window_, 0.3)
         battle_end = BattleEnd(self.game_window_)
         battle_defeated = BattleDefeated(self.game_window_)
-        rewards = ArenaRewards(self.game_window_)
-        loop_end = ArenaRewardsEnd(self.game_window_)
+        rewards = ChestRewards(self.game_window_)
+        loop_end = ChestRewardsEnd(self.game_window_)
 
         # FIXME Simple loop is not right, now rewards state
         # must be reached by all states
@@ -41,9 +43,9 @@ class ShortArenaLoop(game_scripting.StateMachine):
         self.initialize_states()
 
     def update_loop_status(self, next_state):
-        retiring = (type(self.current_state_) == ArenaRewardsEnd)
+        retiring = (type(self.current_state_) == ChestRewardsEnd)
         # State changed (reward received)
-        if retiring and (type(next_state) != ArenaRewardsEnd):
+        if retiring and (type(next_state) != ChestRewardsEnd):
             self.rewared_received_ += 1
 
     def loop_status_string(self):
@@ -72,24 +74,50 @@ class ShortCampaignLoop(game_scripting.StateMachine):
 
         start_state = SelectScreen(self.game_window_)
         battle = Battle(self.game_window_)
+        character_selected = CharacterSelected(self.game_window_)
         battle_skip_action = BattleSkipAction(self.game_window_)
         battle_end = BattleEnd(self.game_window_)
         treasure = Treasure(self.game_window_)
+        select_event = SelectEvent(self.game_window_)
+        event_selected = EventSelected(self.game_window_)
+        close_stranger = CloseStranger(self.game_window_)
+        select_battle = SelectBattle(self.game_window_)
         retire = Retire(self.game_window_)
+        reset = Reset(self.game_window_)
 
         # Simple loop
         start_state.add_next_state(battle)
         battle.add_next_state(battle_end)
+        battle.add_next_state(character_selected, True)
         battle.add_next_state(battle_skip_action, True)
+        character_selected.add_next_state(battle)
         battle_skip_action.add_next_state(battle)
         battle_skip_action.add_next_state(battle_end)
         battle_end.add_next_state(treasure)
-        treasure.add_next_state(retire)
+        treasure.add_next_state(retire, True)
+        treasure.add_next_state(select_event, True)
+        select_event.add_next_state(close_stranger)
+        select_event.add_next_state(retire)
+        select_event.add_next_state(event_selected, True)
+        event_selected.add_next_state(select_event)
+        # Start a loop if close to a stranger (special event)
+        close_stranger.add_next_state(select_battle)
+        select_battle.add_next_state(start_state, True)
         retire.add_next_state(start_state)
 
+        # Reset should connect to any possible states
+        reset.add_next_state(start_state)
+        reset.add_next_state(battle)
+        reset.add_next_state(treasure)
+        reset.add_next_state(select_event)
+        reset.add_next_state(close_stranger)
+        # State that likely to disconnect
+        start_state.add_next_state(reset)
+        battle.add_next_state(reset)
+
         self.states_ = [
-            start_state, battle, battle_skip_action, battle_end, treasure,
-            retire
+            start_state, battle, character_selected, battle_skip_action, battle_end, treasure,
+            select_event, event_selected, close_stranger, select_battle, retire, reset
         ]
         self.initialize_states()
 
@@ -107,22 +135,97 @@ class ShortCampaignLoop(game_scripting.StateMachine):
         ]
 
 
-class ArenaRewards(game_scripting.State):
+class CampaignLoop(game_scripting.StateMachine):
+
+    def __init__(self, game_window) -> None:
+        super().__init__(game_window)
+        self.rewared_received_ = 0
+        self.start_time_ = time.time()
+
+        start_state = SelectScreen(self.game_window_)
+        battle = Battle(self.game_window_)
+        character_selected = CharacterSelected(self.game_window_)
+        battle_skip_action = BattleSkipAction(self.game_window_)
+        battle_end = BattleEnd(self.game_window_)
+        treasure = Treasure(self.game_window_)
+        select_battle = SelectBattle(self.game_window_)
+        rewards = ChestRewards(self.game_window_)
+        loop_end = ChestRewardsEnd(self.game_window_)
+        select_event = SelectEvent(self.game_window_)
+        event_selected = EventSelected(self.game_window_)
+
+        # Simple loop
+        start_state.add_next_state(battle)
+        battle.add_next_state(battle_end)
+        battle.add_next_state(character_selected, True)
+        battle.add_next_state(battle_skip_action, True)
+        character_selected.add_next_state(battle)
+        battle_skip_action.add_next_state(battle)
+        battle_skip_action.add_next_state(battle_end)
+        battle_end.add_next_state(treasure)
+
+        # WIP
+        battle_end.add_next_state(rewards, True)
+        rewards.add_next_state(loop_end)
+        treasure.add_next_state(start_state)
+        treasure.add_next_state(select_event)
+        treasure.add_next_state(select_battle)
+        select_event.add_next_state(select_battle)
+        select_event.add_next_state(event_selected, True)
+        event_selected.add_next_state(select_event)
+        event_selected.add_next_state(select_battle)
+        select_battle.add_next_state(select_event)
+        select_battle.add_next_state(start_state, True)
+        loop_end.add_next_state(start_state)
+
+        self.states_ = [
+            start_state, battle, character_selected, battle_skip_action, battle_end, treasure,
+            select_event, event_selected, select_battle, rewards, loop_end
+        ]
+        self.initialize_states()
+
+    def update_loop_status(self, next_state):
+        retiring = (type(self.current_state_) == ChestRewardsEnd)
+        # State changed (reward received)
+        if retiring and (type(next_state) != ChestRewardsEnd):
+            self.rewared_received_ += 1
+
+    def loop_status_string(self):
+        script_duration = int(time.time() - self.start_time_)
+        return [
+            'Completed runs: {}'.format(self.rewared_received_),
+            'Script duration: {} seconds'.format(script_duration)
+        ]
+
+
+class ChestRewards(game_scripting.State):
 
     def __init__(self, game_window):
         super().__init__(game_window)
         # FIXME use file path
         self.state_view_.append(
             cv2.imread('hearthstone/assets/arena_rewards.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/rewards_3.jpg'))
         self.next_states_.append(self)
 
     def act(self):
+        i, res = self.get_current_state_view()
         # Hard code ratio of the reward location
-        off_ratio = (40 / 870, 35 / 701)
-        point_ratio = [(450 / 870, 190 / 701), (186 / 870, 300 / 701),
-                       (676 / 870, 330 / 701), (250 / 870, 600 / 701),
-                       (610 / 870, 623 / 701)]
-        _, res = self.get_current_state_view()
+        if i == 0:
+            template_x = 870
+            template_y = 701
+            off_ratio = (40 / template_x, 35 / template_y)
+            point_ratio = [(450 / template_x, 190 / template_y), (186 / template_x, 300 / template_y),
+                            (676 / template_x, 330 / template_y), (250 / template_x, 600 / template_y),
+                            (610 / template_x, 623 / template_y)]
+        elif i == 1:
+            template_x = 782
+            template_y = 589
+            off_ratio = (50 / 782, 35 / 589)
+            point_ratio = [(395 / template_x, 125 / template_y), (175 / template_x, 470 / template_y),
+                            (630 / template_x, 480 / template_y)]
+
         lo = res[0][0]
         hi = res[0][1]
         full_x = hi[0] - lo[0]
@@ -140,12 +243,16 @@ class ArenaRewards(game_scripting.State):
             self.game_window_.click(point, point_offset_range=off_range)
 
 
-class ArenaRewardsEnd(game_scripting.MatchAndClickState):
+class ChestRewardsEnd(game_scripting.MatchAndClickState):
 
     def __init__(self, game_window):
         super().__init__(game_window)
         # FIXME use file path
         self.state_view_.append(cv2.imread('hearthstone/assets/confirm.jpg'))
+        self.state_view_.append(cv2.imread('hearthstone/assets/confirm_2.jpg'))
+        self.state_view_.append(cv2.imread('hearthstone/assets/confirm_3.jpg'))
+        self.state_view_.append(cv2.imread('hearthstone/assets/confirm_4.jpg'))
+        self.next_states_.append(self)
 
 
 class SearchingOpponent(game_scripting.MatchAndClickState):
@@ -198,6 +305,159 @@ class SelectScreen(game_scripting.State):
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         self.game_window_.click(point, point_offset_range=off_range)
 
+class EventSelected(game_scripting.State):
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/revive_prompt.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/power_up_prompt.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/stranger_top.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/special_event_prompt.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/special_event_prompt_2.jpg'))
+        self.view_ = [
+            cv2.imread('hearthstone/assets/stranger_top.jpg'),
+            cv2.imread('hearthstone/assets/stranger_bottom.jpg')
+        ]
+        self.next_states_.append(self)
+
+    def act(self):
+        i, res = self.get_current_state_view()
+        print(i)
+        if i != 2:
+            # Get mid point of the match
+            lo = res[0][0]
+            hi = res[0][1]
+            point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
+            off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+            # Right click if at selecting enemy
+            self.game_window_.click(point, point_offset_range=off_range)
+
+            # Wait for animation and click again to normalize
+            time.sleep(1)
+            self.game_window_.click(point, point_offset_range=off_range)
+            time.sleep(4 if i == 0 else 2)
+        else:
+            off = 0
+            tres = self.game_window_.find_matches(self.view_[off])
+            if len(tres) == 0:
+                raise Exception("Expected at least 1 match for the icon")
+            bres = self.game_window_.find_matches(self.view_[1 + off])
+            if len(bres) == 0:
+                raise Exception("Expected at least 1 match for the icon")
+            # Define point for the action
+            y = int((tres[0][1][1] + bres[0][0][1]) / 2)
+            x = int((bres[0][0][0] + bres[0][1][0]) / 2)
+            self.game_window_.click((x, y))
+
+            # Get mid point of the match
+            time.sleep(1)
+            lo = bres[0][0]
+            hi = bres[0][1]
+            point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
+            off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+            self.game_window_.click(point, point_offset_range=off_range)
+            time.sleep(1)
+            self.game_window_.click(point, point_offset_range=off_range)
+            time.sleep(3)
+
+
+class SelectEvent(game_scripting.State):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/special_event.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/power_up.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/revive.jpg'))
+        self.next_states_.append(self)
+
+    def act(self):
+        offset = -1
+        while offset < len(self.state_view_):
+            # There can be inactionable match, check if the action brings it
+            # to the next state
+            try:
+                offset, res = self.get_current_state_view(offset+1)
+            except game_scripting.State.StateException as ex:
+                if "No matching state view is found" in str(ex):
+                    return
+            time.sleep(0.2)
+            last_point = None
+            for (lo, hi) in res:
+                # Get mid point of the match
+                point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
+                off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+                # Check if the point refers to the same spot
+                if last_point is not None:
+                    in_x = ((point[0] > last_point[0][0]) and (point[0] < last_point[1][0]))
+                    in_y = ((point[1] > last_point[0][1]) and (point[1] < last_point[1][1]))
+                    if in_x and in_y:
+                        continue
+                last_lo = (point[0] - off_range[0], point[1] - off_range[1])
+                last_hi = (point[0] + off_range[0], point[1] + off_range[1])
+                last_point = (last_lo, last_hi)
+                self.game_window_.click(point, point_offset_range=off_range)
+                if super().next_state(wait_time=0.3) != self:
+                    return
+
+    def next_state(self, wait_time=None, ignore_self=True):
+        return super().next_state(wait_time=wait_time, ignore_self=True)
+
+class SelectBattle(game_scripting.State):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/fighter.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/guardian.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/mage.jpg'))
+        self.next_states_.append(self)
+        # Easy for matching in full color
+        self.gray_scale_matching_ = False
+
+    def act(self):
+        offset = -1
+        while offset < len(self.state_view_):
+            # There can be inactionable match, check if the action brings it
+            # to the next state
+            try:
+                offset, res = self.get_current_state_view(offset+1)
+            except game_scripting.State.StateException as ex:
+                if "No matching state view is found" in str(ex):
+                    return
+            time.sleep(0.2)
+            last_point = None
+            for (lo, hi) in res:
+                # Get lower of the matching point
+                point = (int((lo[0] + hi[0]) / 2), int(hi[1] + (hi[1] - lo[1])))
+                off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+                # Check if the point refers to the same spot
+                if last_point is not None:
+                    in_x = ((point[0] > last_point[0][0]) and (point[0] < last_point[1][0]))
+                    in_y = ((point[1] > last_point[0][1]) and (point[1] < last_point[1][1]))
+                    if in_x and in_y:
+                        continue
+                last_lo = (point[0] - off_range[0], point[1] - off_range[1])
+                last_hi = (point[0] + off_range[0], point[1] + off_range[1])
+                last_point = (last_lo, last_hi)
+                self.game_window_.click(point, point_offset_range=off_range)
+                if super().next_state(wait_time=0.3) != self:
+                    return
+
+    def next_state(self, wait_time=None, ignore_self=True):
+        return super().next_state(wait_time=wait_time, ignore_self=True)
+
 
 class Battle(game_scripting.State):
 
@@ -209,10 +469,6 @@ class Battle(game_scripting.State):
         self.state_view_.append(cv2.imread('hearthstone/assets/ready_icon.jpg'))
         self.state_view_.append(
             cv2.imread('hearthstone/assets/prepare_icon.jpg'))
-        self.act_view_ = [
-            cv2.imread('hearthstone/assets/act_left.jpg'),
-            cv2.imread('hearthstone/assets/act_right.jpg')
-        ]
         self.next_states_.append(self)
 
     def act(self):
@@ -229,23 +485,113 @@ class Battle(game_scripting.State):
             # Get bottom-left point of the match
             self.game_window_.click((res[0][0][0], res[0][1][1]))
         else:
-            l_list = self.game_window_.find_matches(self.act_view_[0])
-            if len(l_list) == 0:
-                raise Exception("Expected at least 1 match for the icon")
-            r_list = self.game_window_.find_matches(self.act_view_[1])
-            if len(r_list) == 0:
-                raise Exception("Expected at least 1 match for the icon")
-            # Define bounding box for the actions
-            lo = (l_list[0][1][0], l_list[0][0][1])
-            hi = (r_list[0][0][0], r_list[0][1][1])
-            # Define points for three actions
-            y = int((hi[1] + lo[1]) / 2)
-            x_off = int((hi[0] - lo[0]) / 3)
-            x = lo[0] + int(x_off / 2)
-            action_points = [(x, y), (x + x_off, y), (x + 2 * x_off, y)]
-            # FIXME only select the first action for now
-            self.game_window_.click(action_points[0])
+            # Do nothing, should transition to the other state
+            pass
 
+class CharacterSelected(game_scripting.State):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(cv2.imread('hearthstone/assets/act_left.jpg'))
+        self.characters_ = [
+            (cv2.imread('hearthstone/assets/characters/diabollo.jpg'), [(cv2.imread('hearthstone/assets/characters/diabollo_skill_2.jpg'), self.simple_click),
+            (cv2.imread('hearthstone/assets/characters/diabollo_skill_3.jpg'), functools.partial(self.click_target, True)),
+            (cv2.imread('hearthstone/assets/characters/diabollo_skill_1.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/rag.jpg'), [(cv2.imread('hearthstone/assets/characters/rag_skill_2.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/house.jpg'), [(cv2.imread('hearthstone/assets/characters/house_skill_1.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/wal.jpg'), [(cv2.imread('hearthstone/assets/characters/wal_skill_1.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/tregx.jpg'), [(cv2.imread('hearthstone/assets/characters/tregx_skill_1.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/antony.jpg'), [
+            (cv2.imread('hearthstone/assets/characters/antony_skill_1.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/bloodhoof.jpg'), [
+            (cv2.imread('hearthstone/assets/characters/bloodhoof_skill_2.jpg'), self.simple_click),
+            (cv2.imread('hearthstone/assets/characters/bloodhoof_skill_3.jpg'), self.simple_click),
+            (cv2.imread('hearthstone/assets/characters/bloodhoof_skill_1.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/gaton.jpg'), [(cv2.imread('hearthstone/assets/characters/gaton_skill_2.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/samuro.jpg'), [
+            (cv2.imread('hearthstone/assets/characters/samuro_skill_3.jpg'), self.simple_click),
+            (cv2.imread('hearthstone/assets/characters/samuro_skill_2.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/bomb.jpg'), [(cv2.imread('hearthstone/assets/characters/bomb_skill_1.jpg'), self.simple_click)]),
+            (cv2.imread('hearthstone/assets/characters/lich_king.jpg'), [(cv2.imread('hearthstone/assets/characters/lich_king_skill_1.jpg'), functools.partial(self.click_target, True))]),
+            (cv2.imread('hearthstone/assets/characters/creature.jpg'), [(cv2.imread('hearthstone/assets/characters/creature.jpg'), functools.partial(self.click_target, True))]),
+        ]
+        self.target_prompt_ = cv2.imread('hearthstone/assets/available_target.jpg')
+        self.next_states_.append(self)
+
+    # Additional logic to define how to cast the skill
+    def simple_click(self, res):
+        # Click the mid point of the match
+        lo = res[0][0]
+        hi = res[0][1]
+        point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
+        off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+        self.game_window_.click(point, point_offset_range=off_range)
+    
+    # Additional logic to define how to cast the skill
+    def click_target(self, select_enemy, res):
+        # Click the mid point of the match
+        lo = res[0][0]
+        hi = res[0][1]
+        point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
+        off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+        self.game_window_.click(point, point_offset_range=off_range)
+        time.sleep(1)
+        current_screenshot = self.game_window_.get_current_screenshot()
+        res = self.game_window_.find_matches(self.target_prompt_, img_rgb=current_screenshot)
+        if len(res) != 0:
+            half_height = int(current_screenshot.shape[0] / 2)
+            if select_enemy:
+                allow_y_range = (0, half_height)
+            else:
+                allow_y_range = (half_height, 2 * half_height)
+            for pt in res:
+                # Skip if not in range
+                if (pt[1][1] < allow_y_range[0]) or (pt[1][1] > allow_y_range[1]):
+                    continue
+                # Click the lower part of the match
+                lo = pt[0]
+                hi = pt[1]
+                point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2) + (hi[1] - lo[1]))
+                off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+                self.game_window_.click(point, point_offset_range=off_range)
+                break
+        else:
+            raise game_scripting.State.StateException("Failed to find proper target for click_target()")
+
+    def act(self):
+        current_screenshot = self.game_window_.get_current_screenshot()
+        for char, skills in self.characters_:
+            res = self.game_window_.find_matches(char, img_rgb=current_screenshot)
+            if len(res) != 0:
+                for skill, action in skills:
+                    res = self.game_window_.find_matches(skill, img_rgb=current_screenshot)
+                    if len(res) != 0:
+                        action(res)
+                        return
+        raise game_scripting.State.StateException("Failed to find proper action for selected charactor")
+
+# Transitioning state
+class CloseStranger(game_scripting.State):
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/special_event.jpg'))
+
+    def act(self):
+        pass
+
+    def get_current_state_view(self, offset=0):
+        current_screenshot = self.game_window_.get_current_screenshot()
+        for i in range(offset, len(self.state_view_)):
+            res = self.game_window_.find_matches(self.state_view_[i], self.gray_scale_matching_, img_rgb=current_screenshot)
+            # Check if the event is seen in the upper 1/3 of the game window
+            allow_y_range = int(current_screenshot.shape[0] / 3)
+            for pt in res:
+                if pt[1][1] <= allow_y_range:
+                    return i, [pt]
+        raise game_scripting.State.StateException("No matching state view is found")
 
 class BattleSkipAction(game_scripting.State):
 
@@ -284,7 +630,7 @@ class BattleSkipAction(game_scripting.State):
         self.game_window_.click(point, point_offset_range=off_range)
 
 
-class BattleEnd(game_scripting.State):
+class BattleEnd(game_scripting.MatchAndClickState):
 
     def __init__(self, game_window):
         super().__init__(game_window)
@@ -293,16 +639,9 @@ class BattleEnd(game_scripting.State):
             cv2.imread('hearthstone/assets/click_prompt.jpg'))
         self.state_view_.append(
             cv2.imread('hearthstone/assets/click_prompt_2.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/victory.jpg'))
         self.next_states_.append(self)
-
-    def act(self):
-        _, res = self.get_current_state_view()
-        # Get mid point of the match
-        lo = res[0][0]
-        hi = res[0][1]
-        point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
-        off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
-        self.game_window_.click(point, point_offset_range=off_range)
 
 
 class BattleDefeated(game_scripting.MatchAndClickState):
@@ -321,35 +660,39 @@ class Treasure(game_scripting.State):
         # FIXME use file path
         self.state_view_.append(
             cv2.imread('hearthstone/assets/treasure_top.jpg'))
-        self.unselected_view_ = [
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/treasure_top_2.jpg'))
+        self.view_ = [
             cv2.imread('hearthstone/assets/treasure_top.jpg'),
-            cv2.imread('hearthstone/assets/treasure_bottom.jpg')
+            cv2.imread('hearthstone/assets/treasure_bottom_3.jpg'),
+            cv2.imread('hearthstone/assets/treasure_top_2.jpg'),
+            cv2.imread('hearthstone/assets/treasure_bottom_2.jpg'),
         ]
-        self.selected_view_ = cv2.imread(
-            'hearthstone/assets/treasure_selected.jpg')
         self.next_states_.append(self)
 
     def act(self):
         # Check which substate the current state is at
-        res = self.game_window_.find_matches(self.selected_view_)
-        if len(res) > 0:
-            # Get mid point of the match
-            lo = res[0][0]
-            hi = res[0][1]
-            point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
-            off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
-            self.game_window_.click(point, point_offset_range=off_range)
-        else:
-            tres = self.game_window_.find_matches(self.unselected_view_[0])
-            if len(tres) == 0:
-                raise Exception("Expected at least 1 match for the icon")
-            bres = self.game_window_.find_matches(self.unselected_view_[1])
-            if len(bres) == 0:
-                raise Exception("Expected at least 1 match for the icon")
-            # Define point for the action
-            y = int((tres[0][1][1] + bres[0][0][1]) / 2)
-            x = int((bres[0][0][0] + bres[0][1][0]) / 2)
-            self.game_window_.click((x, y))
+        i, _ = self.get_current_state_view()
+        off = int(2 * i)
+        tres = self.game_window_.find_matches(self.view_[off])
+        if len(tres) == 0:
+            raise Exception("Expected at least 1 match for the icon")
+        bres = self.game_window_.find_matches(self.view_[1 + off])
+        if len(bres) == 0:
+            raise Exception("Expected at least 1 match for the icon")
+        # Define point for the action
+        y = int((tres[0][1][1] + bres[0][0][1]) / 2)
+        x = int((bres[0][0][0] + bres[0][1][0]) / 2)
+        self.game_window_.click((x, y))
+
+        # Get mid point of the match
+        time.sleep(1)
+        lo = bres[0][0]
+        hi = bres[0][1]
+        point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
+        off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
+        self.game_window_.click(point, point_offset_range=off_range)
+        time.sleep(2)
 
 
 class Retire(game_scripting.State):
@@ -375,3 +718,17 @@ class Retire(game_scripting.State):
         point = (int((lo[0] + hi[0]) / 2), int((lo[1] + hi[1]) / 2))
         off_range = (int((hi[0] - lo[0]) / 4), int((hi[1] - lo[1]) / 4))
         self.game_window_.click(point, point_offset_range=off_range)
+
+class Reset(game_scripting.MatchAndClickState):
+
+    def __init__(self, game_window):
+        super().__init__(game_window)
+        # FIXME use file path
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/disconnected.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/merc_mode.jpg'))
+        self.state_view_.append(
+            cv2.imread('hearthstone/assets/campaign.jpg'))
+        self.next_states_.append(self)
+
